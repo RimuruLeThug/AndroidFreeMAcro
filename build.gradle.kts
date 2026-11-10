@@ -8,6 +8,9 @@ buildscript {
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22")
     }
 }
+plugins {
+    alias(libs.plugins.kotlin.compose) apply false
+}
 
 allprojects {
     repositories {
