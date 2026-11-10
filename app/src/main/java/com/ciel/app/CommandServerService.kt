@@ -1,52 +1,119 @@
 package com.ciel.app
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
+import android.os.Handler
 import android.os.IBinder
-import io.ktor.server.engine.*
-import io.ktor.server.netty.*
-import io.ktor.server.routing.*
-import io.ktor.server.application.*
-import io.ktor.server.response.*
-import io.ktor.server.request.*
-import io.ktor.http.*
+import android.os.Looper
+import android.util.Log
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
+/** Service au premier plan qui héberge le serveur HTTP local et exécute les commandes de Ciel. */
 class CommandServerService : Service() {
-    private var server: NettyApplicationEngine? = null
-    private val commandProcessor = CielCommandProcessor()
+    private var serveur: MiniServeurHttp? = null
+    private val principal = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
-        server = embeddedServer(Netty, port = 8080) {
-            routing {
-                get("/status") {
-                    call.respondText("Server is running")
-                }
-                
-                post("/command") {
-                    val authHeader = call.request.header(HttpHeaders.Authorization)
-                    val body = call.receiveText()
-                    
-                    when (val result = commandProcessor.processCommand(authHeader, body)) {
-                        is CielCommandProcessor.CommandResult.Unauthorized -> {
-                            call.respond(HttpStatusCode.Unauthorized, "Accès refusé")
-                        }
-                        is CielCommandProcessor.CommandResult.Success -> {
-                            call.respondText(result.message)
-                        }
-                        is CielCommandProcessor.CommandResult.Error -> {
-                            call.respond(HttpStatusCode.BadRequest, result.message)
-                        }
-                    }
-                }
+        val canal = NotificationChannel(CANAL, "Serveur Ciel", NotificationManager.IMPORTANCE_LOW)
+        getSystemService(NotificationManager::class.java).createNotificationChannel(canal)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val reglages = Reglages(this)
+        ServiceCompat.startForeground(
+            this, 1, notification(reglages.port),
+            if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
+        )
+        if (serveur?.actif != true) {
+            try {
+                serveur = MiniServeurHttp(reglages.port) { requete -> repondre(requete, reglages) }.also { it.demarrer() }
+                enMarche = true
+                erreur = null
+            } catch (e: Exception) {
+                Log.e(TAG, "Démarrage du serveur impossible", e)
+                erreur = "Port ${reglages.port} indisponible : ${e.message}"
+                enMarche = false
+                stopSelf()
             }
-        }.start(wait = false)
+        }
+        return START_STICKY
+    }
+
+    private fun repondre(requete: Requete, reglages: Reglages): Reponse {
+        val auth = requete.entetes["authorization"]
+        return when (val r = CielCommandProcessor.traiter(requete.chemin, requete.params, auth, reglages.jeton)) {
+            is Resultat.Refuse -> Reponse(401, MiniServeurHttp.json(false, "Jeton absent ou invalide"))
+            is Resultat.Erreur -> Reponse(r.code, MiniServeurHttp.json(false, r.message))
+            is Resultat.Ok -> {
+                // Les intents de l'Horloge partent du fil principal ; on attend le résultat pour le renvoyer à Ciel.
+                var message = ""
+                var echec: String? = null
+                val fini = CountDownLatch(1)
+                principal.post {
+                    try {
+                        message = Horloge.executer(this, r.commande)
+                    } catch (e: Exception) {
+                        echec = e.message ?: e.toString()
+                    }
+                    fini.countDown()
+                }
+                if (!fini.await(5, TimeUnit.SECONDS)) echec = "Délai dépassé"
+                val e = echec
+                dernier = e ?: message
+                if (e != null) Reponse(500, MiniServeurHttp.json(false, e))
+                else Reponse(200, MiniServeurHttp.json(true, message))
+            }
+        }
+    }
+
+    private fun notification(port: Int): Notification {
+        val ouvrir = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
+        )
+        return Notification.Builder(this, CANAL)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("Ciel écoute les commandes")
+            .setContentText("Minuteurs et alarmes — port $port")
+            .setContentIntent(ouvrir)
+            .setOngoing(true)
+            .build()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        server?.stop(1000, 5000)
+        serveur?.arreter()
+        serveur = null
+        enMarche = false
         super.onDestroy()
+    }
+
+    companion object {
+        private const val TAG = "Ciel"
+        private const val CANAL = "ciel_serveur"
+        @Volatile var enMarche = false
+        @Volatile var erreur: String? = null
+        @Volatile var dernier: String? = null
+
+        fun demarrer(context: Context) {
+            Reglages(context).actif = true
+            ContextCompat.startForegroundService(context, Intent(context, CommandServerService::class.java))
+        }
+
+        fun arreter(context: Context) {
+            Reglages(context).actif = false
+            context.stopService(Intent(context, CommandServerService::class.java))
+        }
     }
 }
