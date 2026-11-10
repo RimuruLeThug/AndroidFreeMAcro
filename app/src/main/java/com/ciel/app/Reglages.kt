@@ -13,8 +13,9 @@ class Reglages(context: Context) {
     val jeton: String
         get() = prefs.getString("jeton", null) ?: nouveauJeton()
 
+    /** Vrai tant que l'utilisateur n'a pas arrêté le serveur : il démarre alors tout seul. */
     var actif: Boolean
-        get() = prefs.getBoolean("actif", false)
+        get() = prefs.getBoolean("actif", true)
         set(v) { prefs.edit().putBoolean("actif", v).apply() }
 
     fun nouveauJeton(): String {

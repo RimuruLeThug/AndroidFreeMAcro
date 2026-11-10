@@ -45,6 +45,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        // Le serveur démarre tout seul à l'ouverture, sauf si l'utilisateur l'a arrêté exprès.
+        if (Reglages(this).actif && !CommandServerService.enMarche) CommandServerService.demarrer(this)
         setContent { MyApplicationTheme { Scaffold { p -> Ecran(Modifier.padding(p)) } } }
     }
 
