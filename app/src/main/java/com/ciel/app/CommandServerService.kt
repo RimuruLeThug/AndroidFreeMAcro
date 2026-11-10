@@ -14,8 +14,8 @@ import io.ktor.http.*
 class CommandServerService : Service() {
     private var server: NettyApplicationEngine? = null
     
-    // Ton token secret
-    private val API_TOKEN=*** CielSecureToken2026" 
+    // Ton token secret - Correction de syntaxe
+    private val API_TOKEN = "Bearer CielSecureToken2026"
 
     private fun isAuthorized(call: ApplicationCall): Boolean {
         val authHeader = call.request.header(HttpHeaders.Authorization)
