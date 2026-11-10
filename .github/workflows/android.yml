@@ -16,7 +16,7 @@ jobs:
         distribution: 'temurin'
     - name: Build with Gradle
       # Désactivation du cache de configuration pour éviter les erreurs de mutation de dépendances
-      run: ./gradlew clean assembleDebug --no-configuration-cache
+      run: ./gradlew clean assembleDebug --no-configuration-cache --info
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
