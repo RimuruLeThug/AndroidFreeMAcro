@@ -13,14 +13,7 @@ import io.ktor.http.*
 
 class CommandServerService : Service() {
     private var server: NettyApplicationEngine? = null
-    
-    // Ton token secret - Correction de syntaxe
-    private val API_TOKEN = "Bearer CielSecureToken2026"
-
-    private fun isAuthorized(call: ApplicationCall): Boolean {
-        val authHeader = call.request.header(HttpHeaders.Authorization)
-        return authHeader == API_TOKEN
-    }
+    private val commandProcessor = CielCommandProcessor()
 
     override fun onCreate() {
         super.onCreate()
@@ -31,12 +24,20 @@ class CommandServerService : Service() {
                 }
                 
                 post("/command") {
-                    if (!isAuthorized(call)) {
-                        call.respond(HttpStatusCode.Unauthorized, "Accès refusé")
-                        return@post
-                    }
+                    val authHeader = call.request.header(HttpHeaders.Authorization)
                     val body = call.receiveText()
-                    call.respondText("Commande traitée sécurisée: $body")
+                    
+                    when (val result = commandProcessor.processCommand(authHeader, body)) {
+                        is CielCommandProcessor.CommandResult.Unauthorized -> {
+                            call.respond(HttpStatusCode.Unauthorized, "Accès refusé")
+                        }
+                        is CielCommandProcessor.CommandResult.Success -> {
+                            call.respondText(result.message)
+                        }
+                        is CielCommandProcessor.CommandResult.Error -> {
+                            call.respond(HttpStatusCode.BadRequest, result.message)
+                        }
+                    }
                 }
             }
         }.start(wait = false)
