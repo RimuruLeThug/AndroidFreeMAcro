@@ -1,8 +1,10 @@
 package com.ciel.app
 
 import android.Manifest
+import android.app.AlarmManager
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Uri
@@ -13,31 +15,24 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ciel.app.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import java.net.Inet4Address
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MainActivity : ComponentActivity() {
 
@@ -45,7 +40,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        // Le serveur démarre tout seul à l'ouverture, sauf si l'utilisateur l'a arrêté exprès.
         if (Reglages(this).actif && !CommandServerService.enMarche) CommandServerService.demarrer(this)
         setContent { MyApplicationTheme { Scaffold { p -> Ecran(Modifier.padding(p)) } } }
     }
@@ -65,7 +59,6 @@ class MainActivity : ComponentActivity() {
         var tic by remember { mutableIntStateOf(0) }
         LaunchedEffect(Unit) { while (true) { delay(1000); tic++ } }
 
-        // Relu à chaque tic : état du service et autorisations
         val enMarche = tic.let { CommandServerService.enMarche }
         val superposition = tic.let { Settings.canDrawOverlays(this) }
         val batterie = tic.let {
@@ -73,60 +66,114 @@ class MainActivity : ComponentActivity() {
         }
         val ip = remember(tic / 5) { adresseIp() }
         val url = "http://$ip:${reglages.port}"
+        
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val nextAlarm = remember(tic / 5) { alarmManager.nextAlarmClock }
 
         Column(
-            modifier.padding(16.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = modifier
+                .padding(16.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Ciel — minuteurs et alarmes", style = MaterialTheme.typography.headlineSmall)
-            Text(
-                if (enMarche) "Serveur : EN MARCHE" else "Serveur : arrêté",
-                style = MaterialTheme.typography.titleMedium,
-                color = if (enMarche) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-            )
-            CommandServerService.erreur?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Button(onClick = {
-                if (enMarche) CommandServerService.arreter(this@MainActivity)
-                else CommandServerService.demarrer(this@MainActivity)
-            }) { Text(if (enMarche) "Arrêter le serveur" else "Démarrer le serveur") }
-
-            HorizontalDivider()
-            Text("Adresse : $url", fontFamily = FontFamily.Monospace)
-            Text("Jeton : $jeton", fontFamily = FontFamily.Monospace)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { copier("url=$url\njeton=$jeton") }) { Text("Copier adresse + jeton") }
-                OutlinedButton(onClick = { jeton = reglages.nouveauJeton() }) { Text("Nouveau jeton") }
+            Text("Ciel", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            
+            // Server Status Card
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(12.dp).background(if (enMarche) Color.Green else Color.Red, CircleShape))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (enMarche) "Serveur : EN MARCHE" else "Serveur : Arrêté", 
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold)
+                    }
+                    
+                    Button(onClick = {
+                        if (enMarche) CommandServerService.arreter(this@MainActivity)
+                        else CommandServerService.demarrer(this@MainActivity)
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (enMarche) "Arrêter le serveur" else "Démarrer le serveur")
+                    }
+                    
+                    CommandServerService.erreur?.let { 
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) 
+                    }
+                }
             }
 
-            HorizontalDivider()
-            Text("Autorisations nécessaires", style = MaterialTheme.typography.titleMedium)
-            Text("Superposition (lancer l'Horloge en arrière-plan) : " + if (superposition) "OK" else "À ACCORDER")
-            if (!superposition) Button(onClick = {
-                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-            }) { Text("Autoriser la superposition") }
-            Text("Optimisation batterie désactivée : " + if (batterie) "OK" else "À FAIRE")
-            if (!batterie) Button(onClick = {
-                startActivity(
-                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
-                )
-            }) { Text("Ne pas optimiser la batterie") }
-
-            HorizontalDivider()
-            OutlinedButton(onClick = {
-                CommandServerService.dernier = try {
-                    Horloge.executer(this@MainActivity, Commande.Minuteur(10, "Test Ciel"))
-                } catch (e: Exception) {
-                    e.message
+            // Visual Indicator for Active Alarms
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
+                containerColor = if (nextAlarm != null) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+            )) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Replaced Icon usage
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("Prochaine alarme", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = if (nextAlarm != null) {
+                                val date = Date(nextAlarm.triggerTime)
+                                SimpleDateFormat("EEE HH:mm", Locale.getDefault()).format(date)
+                            } else {
+                                "Aucune alarme programmée"
+                            },
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
-            }) { Text("Tester : minuteur 10 s") }
-            CommandServerService.dernier?.let { Text("Dernière action : $it") }
+            }
 
-            HorizontalDivider()
-            Text("Exemples (depuis le PC, même wifi) :", style = MaterialTheme.typography.titleSmall)
-            Text(
-                "$url/minuteur?secondes=300&message=Pates&token=…\n$url/alarme?heure=7&minute=30&token=…\n$url/status",
-                fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall
-            )
+            // Config Card
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Configuration", style = MaterialTheme.typography.titleSmall)
+                    Text("Adresse : $url", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                    Text("Jeton : $jeton", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { copier("url=$url\njeton=$jeton") }, modifier = Modifier.weight(1f)) { Text("Copier") }
+                        OutlinedButton(onClick = { jeton = reglages.nouveauJeton() }, modifier = Modifier.weight(1f)) { Text("Nouveau jeton") }
+                    }
+                }
+            }
+
+            // Permissions
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Permissions", style = MaterialTheme.typography.titleSmall)
+                    PermissionRow("Superposition", superposition) {
+                        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                    }
+                    PermissionRow("Batterie (Sauf optim.)", batterie) {
+                        startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+                    }
+                }
+            }
+
+            // Last Activity
+            CommandServerService.dernier?.let {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Dernière action", style = MaterialTheme.typography.titleSmall)
+                        Text(it, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun PermissionRow(label: String, ok: Boolean, onClick: () -> Unit) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            if (ok) {
+                Text("OK", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+            } else {
+                TextButton(onClick = onClick) {
+                    Text("ACCORDER", color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
     }
 

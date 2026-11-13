@@ -51,11 +51,21 @@ class CommandServerService : Service() {
     }
 
     private fun repondre(requete: Requete, reglages: Reglages): Reponse {
+        Log.i(TAG, "Requête reçue : ${requete.chemin} ${requete.params}")
         val auth = requete.entetes["authorization"]
-        return when (val r = CielCommandProcessor.traiter(requete.chemin, requete.params, auth, reglages.jeton)) {
-            is Resultat.Refuse -> Reponse(401, MiniServeurHttp.json(false, "Jeton absent ou invalide"))
-            is Resultat.Erreur -> Reponse(r.code, MiniServeurHttp.json(false, r.message))
+        val resultat = CielCommandProcessor.traiter(requete.chemin, requete.params, auth, reglages.jeton)
+        Log.d(TAG, "Résultat du traitement : $resultat")
+        return when (val r = resultat) {
+            is Resultat.Refuse -> {
+                Log.w(TAG, "Requête refusée : ${requete.chemin}")
+                Reponse(401, MiniServeurHttp.json(false, "Jeton absent ou invalide"))
+            }
+            is Resultat.Erreur -> {
+                Log.e(TAG, "Erreur lors du traitement (${r.code}) : ${r.message}")
+                Reponse(r.code, MiniServeurHttp.json(false, r.message))
+            }
             is Resultat.Ok -> {
+                Log.i(TAG, "Commande validée : ${r.commande}")
                 // Les intents de l'Horloge partent du fil principal ; on attend le résultat pour le renvoyer à Ciel.
                 var message = ""
                 var echec: String? = null
@@ -63,12 +73,17 @@ class CommandServerService : Service() {
                 principal.post {
                     try {
                         message = Horloge.executer(this, r.commande)
+                        Log.i(TAG, "Commande exécutée avec succès : $message")
                     } catch (e: Exception) {
+                        Log.e(TAG, "Erreur lors de l'exécution de la commande", e)
                         echec = e.message ?: e.toString()
                     }
                     fini.countDown()
                 }
-                if (!fini.await(5, TimeUnit.SECONDS)) echec = "Délai dépassé"
+                if (!fini.await(5, TimeUnit.SECONDS)) {
+                    Log.e(TAG, "Délai dépassé pour l'exécution de ${r.commande}")
+                    echec = "Délai dépassé"
+                }
                 val e = echec
                 dernier = e ?: message
                 if (e != null) Reponse(500, MiniServeurHttp.json(false, e))
