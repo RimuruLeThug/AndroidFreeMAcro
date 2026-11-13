@@ -131,6 +131,15 @@ class MainActivity : ComponentActivity() {
                     Text("Configuration", style = MaterialTheme.typography.titleSmall)
                     Text("Adresse : $url", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                     Text("Jeton : $jeton", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text("Respecter le mode DND", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = reglages.respecterDnd,
+                            onCheckedChange = { reglages.respecterDnd = it }
+                        )
+                    }
+
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { copier("url=$url\njeton=$jeton") }, modifier = Modifier.weight(1f)) { Text("Copier") }
                         OutlinedButton(onClick = { jeton = reglages.nouveauJeton() }, modifier = Modifier.weight(1f)) { Text("Nouveau jeton") }
