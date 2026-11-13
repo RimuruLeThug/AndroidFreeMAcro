@@ -32,7 +32,7 @@ object Horloge {
                 "Alarme réglée à %02d:%02d".format(commande.heure, commande.minute)
             }
             is Commande.Meteo -> {
-                "Fonction Météo non implémentée"
+                MeteoClient.getMeteo("Toulon")
             }
             Commande.Statut -> "Ciel est en marche"
         }

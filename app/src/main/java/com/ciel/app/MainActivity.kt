@@ -12,6 +12,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import com.ciel.app.BatteryManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -154,6 +157,10 @@ class MainActivity : ComponentActivity() {
                     PermissionRow("Superposition", superposition) {
                         startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
                     }
+                    
+                    // Battery Optimization Section
+                    BatteryOptimizationSection()
+                    
                     PermissionRow("Batterie (Sauf optim.)", batterie) {
                         startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
                     }
@@ -166,6 +173,80 @@ class MainActivity : ComponentActivity() {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Dernière action", style = MaterialTheme.typography.titleSmall)
                         Text(it, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun BatteryOptimizationSection() {
+        val batteryManager = remember { BatteryManager(this@MainActivity) }
+        val ignoringOptimizations by remember { mutableStateOf(batteryManager.isIgnoringOptimizations()) }
+        var refreshKey by remember { mutableIntStateOf(0) }
+        
+        Column(modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Optimisation de la batterie", style = MaterialTheme.typography.titleSmall)
+            
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(
+                                    if (ignoringOptimizations) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.errorContainer,
+                                    CircleShape
+                                )
+                                .align(Alignment.CenterVertically)
+                        ) {
+                            if (ignoringOptimizations) {
+                                Text("✓", color = Color.White, modifier = Modifier.align(Alignment.Center))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                if (ignoringOptimizations) "Optimisation désactivée ✓" else "Optimisation activée",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                if (ignoringOptimizations)
+                                    "Ciel peut s'exécuter en arrière-plan sans restriction"
+                                else
+                                    "Android peut limiter Ciel en arrière-plan",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    if (!ignoringOptimizations) {
+                        Button(
+                            onClick = {
+                                startActivity(Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, 
+                                    android.net.Uri.parse("package:$packageName")))
+                                refreshKey++
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Désactiver l'optimisation pour Ciel")
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = {
+                                startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                refreshKey++
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Voir tous les paramètres d'optimisation")
+                        }
                     }
                 }
             }
