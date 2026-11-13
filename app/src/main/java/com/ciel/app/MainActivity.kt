@@ -2,6 +2,10 @@ package com.ciel.app
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -11,6 +15,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.provider.AlarmClock
 import android.provider.Settings
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -31,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ciel.app.BuildConfig
 import com.ciel.app.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import java.net.Inet4Address
@@ -43,6 +49,28 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        
+        // Startup Security: Persistent notification if permissions are missing
+        val batteryManager = BatteryManager(this)
+        if (!Settings.canDrawOverlays(this) || !batteryManager.isIgnoringOptimizations()) {
+            val channelId = "security_channel"
+            val channel = NotificationChannel(channelId, "Sécurité au démarrage", NotificationManager.IMPORTANCE_HIGH)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            
+            val intent = Intent(this, MainActivity::class.java)
+            val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+            
+            val notification = Notification.Builder(this, channelId)
+                .setSmallIcon(android.R.drawable.stat_notify_error)
+                .setContentTitle("Ciel : Permissions manquantes")
+                .setContentText("Veuillez accorder la superposition et désactiver l'optimisation batterie.")
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .build()
+            
+            getSystemService(NotificationManager::class.java).notify(1, notification)
+        }
+
         if (Reglages(this).actif && !CommandServerService.enMarche) CommandServerService.demarrer(this)
         setContent { MyApplicationTheme { Scaffold { p -> Ecran(Modifier.padding(p)) } } }
     }
@@ -135,17 +163,21 @@ class MainActivity : ComponentActivity() {
                     Text("Adresse : $url", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                     Text("Jeton : $jeton", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                     
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Text("Respecter le mode DND", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                        Switch(
-                            checked = reglages.respecterDnd,
-                            onCheckedChange = { reglages.respecterDnd = it }
-                        )
-                    }
+
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { copier("url=$url\njeton=$jeton") }, modifier = Modifier.weight(1f)) { Text("Copier") }
                         OutlinedButton(onClick = { jeton = reglages.nouveauJeton() }, modifier = Modifier.weight(1f)) { Text("Nouveau jeton") }
+                    }
+                    Button(onClick = {
+                        val timerIntent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
+                            putExtra(AlarmClock.EXTRA_LENGTH, 1800)
+                            putExtra(AlarmClock.EXTRA_MESSAGE, "Sieste")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        this@MainActivity.startActivity(timerIntent)
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Sieste 30m")
                     }
                 }
             }
@@ -175,6 +207,11 @@ class MainActivity : ComponentActivity() {
                         Text(it, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+            }
+
+            // Dev Debug Panel
+            if (BuildConfig.DEV_PANEL) {
+                // DevDebugPanel() // Temporarily disabled
             }
         }
     }
@@ -271,3 +308,5 @@ class MainActivity : ComponentActivity() {
         getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Ciel", texte))
     }
 }
+
+// Removed incomplete DevDebugPanel to clean up build errors

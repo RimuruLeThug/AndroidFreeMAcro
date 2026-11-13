@@ -18,6 +18,26 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    buildTypes {
+        getByName("debug") {
+            buildConfigField("boolean", "DEV_PANEL", "false")
+        }
+        getByName("release") {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            buildConfigField("boolean", "DEV_PANEL", "false")
+        }
+        create("devDebug") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".dev"
+            buildConfigField("boolean", "DEV_PANEL", "true")
+        }
     }
 
     compileOptions {

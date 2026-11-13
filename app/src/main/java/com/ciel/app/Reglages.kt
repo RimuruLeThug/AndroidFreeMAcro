@@ -18,10 +18,6 @@ class Reglages(context: Context) {
         get() = prefs.getBoolean("actif", true)
         set(v) { prefs.edit().putBoolean("actif", v).apply() }
 
-    /** Vrai si Ciel doit respecter le mode « Ne pas déranger » du téléphone. */
-    var respecterDnd: Boolean
-        get() = prefs.getBoolean("respecterDnd", true)
-        set(v) { prefs.edit().putBoolean("respecterDnd", v).apply() }
 
     fun nouveauJeton(): String {
         val octets = ByteArray(18).also { SecureRandom().nextBytes(it) }

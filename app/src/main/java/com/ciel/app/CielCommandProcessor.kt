@@ -6,6 +6,7 @@ import java.security.MessageDigest
 sealed class Commande {
     data class Minuteur(val secondes: Int, val message: String) : Commande()
     data class Alarme(val heure: Int, val minute: Int, val message: String) : Commande()
+    data class Nappe(val secondes: Int, val message: String) : Commande()
     object Statut : Commande()
 }
 
@@ -22,7 +23,8 @@ sealed class Resultat {
  *  - GET /status                                   -> état (sans jeton)
  *  - GET /minuteur?secondes=90[&minutes=..][&heures=..][&message=..]
  *  - GET /alarme?heure=7&minute=30[&message=..]
- * Jeton : en-tête `Authorization: Bearer <jeton>` ou paramètre `token=<jeton>`.
+ *  - GET /nappe?minutes=30[&message=..]            -> nappe de X minutes
+ * Jeton : en-tête `Authorization: Bearer *** ou paramètre `token=<jeton>`.
  */
 object CielCommandProcessor {
 
@@ -31,8 +33,8 @@ object CielCommandProcessor {
         val p = params.mapKeys { it.key.lowercase() }
 
         if (route == "status" || route == "statut") return Resultat.Ok(Commande.Statut)
-        if (route != "minuteur" && route != "alarme") {
-            return Resultat.Erreur(404, "Route inconnue : /$route (routes : /status, /minuteur, /alarme)")
+        if (route != "minuteur" && route != "alarme" && route != "nappe") {
+            return Resultat.Erreur(404, "Route inconnue : /$route (routes : /status, /minuteur, /alarme, /nappe)")
         }
         if (!autorise(auth, p["token"], jeton)) return Resultat.Refuse
 
@@ -45,6 +47,12 @@ object CielCommandProcessor {
                 val total = s.toLong() + m * 60L + h * 3600L
                 if (total !in 1..86400) Resultat.Erreur(400, "Durée entre 1 seconde et 24 heures (reçu : $total s).")
                 else Resultat.Ok(Commande.Minuteur(total.toInt(), message))
+            }
+            "nappe" -> {
+                val m = entier(p["minutes"]) ?: 30
+                val total = m * 60L
+                if (total !in 1..86400) Resultat.Erreur(400, "Durée entre 1 seconde et 24 heures (reçu : $total s).")
+                else Resultat.Ok(Commande.Nappe(total.toInt(), message.ifBlank { "Sieste" }))
             }
             else -> {
                 val h = entier(p["heure"])

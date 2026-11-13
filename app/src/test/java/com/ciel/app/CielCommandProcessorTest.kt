@@ -40,6 +40,11 @@ class CielCommandProcessorTest {
         assertEquals(Resultat.Ok(Commande.Minuteur(86400, "")), traiter("/minuteur", mapOf("heures" to "24")))
     }
 
+    @Test fun nappe() = assertEquals(
+        Resultat.Ok(Commande.Nappe(1800, "Sieste")),
+        traiter("/nappe", mapOf("minutes" to "30"))
+    )
+
     @Test fun alarme() = assertEquals(
         Resultat.Ok(Commande.Alarme(7, 30, "Réveil")),
         traiter("/alarme", mapOf("HEURE" to "7", "MINUTE" to "30", "libelle" to "Réveil"))

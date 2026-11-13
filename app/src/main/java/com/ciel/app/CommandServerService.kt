@@ -18,6 +18,8 @@ import androidx.core.content.ContextCompat
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
+import java.io.File
+
 /** Service au premier plan qui héberge le serveur HTTP local et exécute les commandes de Ciel. */
 class CommandServerService : Service() {
     private var serveur: MiniServeurHttp? = null
@@ -31,13 +33,17 @@ class CommandServerService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val reglages = Reglages(this)
+        val logManager = LogManager(File(filesDir, "logs.json"))
         ServiceCompat.startForeground(
             this, 1, notification(reglages.port),
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
         )
         if (serveur?.actif != true) {
             try {
-                serveur = MiniServeurHttp(reglages.port) { requete -> repondre(requete, reglages) }.also { it.demarrer() }
+                serveur = MiniServeurHttp(reglages.port) { requete ->
+                    val logManager = LogManager(File(filesDir, "logs.json"))
+                    repondre(requete, reglages, logManager)
+                }.also { it.demarrer() }
                 enMarche = true
                 erreur = null
             } catch (e: Exception) {
@@ -50,7 +56,10 @@ class CommandServerService : Service() {
         return START_STICKY
     }
 
-    private fun repondre(requete: Requete, reglages: Reglages): Reponse {
+    private fun repondre(requete: Requete, reglages: Reglages, logManager: LogManager): Reponse {
+        if (requete.chemin == "/logs") {
+            return Reponse(200, logManager.getLogsJson())
+        }
         Log.i(TAG, "Requête reçue : ${requete.chemin} ${requete.params}")
         val auth = requete.entetes["authorization"]
         val resultat = CielCommandProcessor.traiter(requete.chemin, requete.params, auth, reglages.jeton)
@@ -66,7 +75,6 @@ class CommandServerService : Service() {
             }
             is Resultat.Ok -> {
                 Log.i(TAG, "Commande validée : ${r.commande}")
-                // Les intents de l'Horloge partent du fil principal ; on attend le résultat pour le renvoyer à Ciel.
                 var message = ""
                 var echec: String? = null
                 val fini = CountDownLatch(1)

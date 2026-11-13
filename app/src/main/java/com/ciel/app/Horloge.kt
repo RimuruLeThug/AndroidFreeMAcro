@@ -21,6 +21,13 @@ object Horloge {
                 })
                 "Minuteur de ${commande.secondes} s lancé"
             }
+            is Commande.Nappe -> {
+                lancer(context, Intent(AlarmClock.ACTION_SET_TIMER).apply {
+                    putExtra(AlarmClock.EXTRA_LENGTH, commande.secondes)
+                    putExtra(AlarmClock.EXTRA_MESSAGE, commande.message)
+                })
+                "Sieste de ${commande.secondes / 60} min lancée"
+            }
             is Commande.Alarme -> {
                 lancer(context, Intent(AlarmClock.ACTION_SET_ALARM).apply {
                     putExtra(AlarmClock.EXTRA_HOUR, commande.heure)
