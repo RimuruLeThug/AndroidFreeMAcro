@@ -11,10 +11,8 @@ object Horloge {
 
     fun executer(context: Context, commande: Commande): String {
         val reglages = Reglages(context)
-        if (reglages.respecterDnd && isDndActif(context) && (commande is Commande.Alarme || commande is Commande.Minuteur)) {
-            return "Action annulée : mode « Ne pas déranger » actif."
-        }
-
+        // DND check removed as per user request
+        
         return when (commande) {
             is Commande.Minuteur -> {
                 lancer(context, Intent(AlarmClock.ACTION_SET_TIMER).apply {
