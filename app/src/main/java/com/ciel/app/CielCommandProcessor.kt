@@ -6,7 +6,6 @@ import java.security.MessageDigest
 sealed class Commande {
     data class Minuteur(val secondes: Int, val message: String) : Commande()
     data class Alarme(val heure: Int, val minute: Int, val message: String) : Commande()
-    object Meteo : Commande()
     object Statut : Commande()
 }
 
@@ -32,9 +31,8 @@ object CielCommandProcessor {
         val p = params.mapKeys { it.key.lowercase() }
 
         if (route == "status" || route == "statut") return Resultat.Ok(Commande.Statut)
-        if (route == "meteo") return Resultat.Ok(Commande.Meteo)
         if (route != "minuteur" && route != "alarme") {
-            return Resultat.Erreur(404, "Route inconnue : /$route (routes : /status, /minuteur, /alarme, /meteo)")
+            return Resultat.Erreur(404, "Route inconnue : /$route (routes : /status, /minuteur, /alarme)")
         }
         if (!autorise(auth, p["token"], jeton)) return Resultat.Refuse
 
